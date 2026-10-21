@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VLC Remote</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VLC">
+<meta name="theme-color" content="#14161c">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon.png">
+<style>
+  :root{
+    --bg:#14161c; --surface:#1e212b; --surface2:#262a36; --line:#323847;
+    --text:#eef1f6; --muted:#8e97ab; --accent:#ff7a18; --accent-dim:#5a3a1d;
+    --ok:#3ddc84;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+    overscroll-behavior:none; touch-action:manipulation;
+    padding-top:env(safe-area-inset-top);
+    -webkit-user-select:none; user-select:none;
+  }
+  #app{max-width:520px; margin:0 auto; padding:6px 14px 112px}
+  .hide{display:none !important}
+
+  /* ---- header ---- */
+  header{padding:4px 2px 12px}
+  .now{font-size:17px; font-weight:600; line-height:1.25; min-height:42px;
+       display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+  .sub{color:var(--muted); font-size:13px; margin-top:4px; display:flex; gap:8px; align-items:center}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--muted); flex:none}
+  .dot.on{background:var(--ok)}
+  #banner{background:#43202a; color:#ffd9df; border:1px solid #6b2b38; border-radius:12px;
+          padding:10px 12px; font-size:13px; margin-bottom:12px}
+
+  /* ---- scrubber ---- */
+  .scrub{margin:6px 0 2px}
+  input[type=range]{
+    -webkit-appearance:none; width:100%; background:transparent; margin:0;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:8px; border-radius:99px; background:var(--surface2);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:26px; height:26px; margin-top:-9px;
+    border-radius:50%; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,.5);
+  }
+  #seek::-webkit-slider-runnable-track{height:10px}
+  #seek::-webkit-slider-thumb{margin-top:-8px}
+  .times{display:flex; justify-content:space-between; color:var(--muted);
+         font-size:12px; font-variant-numeric:tabular-nums; margin-top:2px}
+
+  /* ---- buttons ---- */
+  .row{display:flex; gap:10px; margin:10px 0}
+  button{
+    font:inherit; color:var(--text); background:var(--surface); border:1px solid var(--line);
+    border-radius:16px; padding:0 10px; min-height:62px; flex:1;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    font-weight:600; cursor:pointer; transition:transform .06s, background .12s;
+  }
+  button:active{transform:scale(.95); background:var(--surface2)}
+  button .ico{font-size:20px; line-height:1}
+  button.sm{min-height:50px; font-size:14px; font-weight:500}
+  button.tiny{min-height:42px; font-size:13px; font-weight:500; border-radius:12px}
+  button.wide{flex:1.4}
+  button.on{background:var(--accent-dim); border-color:var(--accent); color:#ffd9bd}
+  #play{
+    flex:0 0 96px; height:96px; min-height:96px; border-radius:50%;
+    background:var(--accent); border:none; color:#1a1004; font-size:36px;
+    box-shadow:0 6px 20px rgba(255,122,24,.28);
+  }
+  .playrow{align-items:center; justify-content:center; margin:14px 0 6px}
+  .label{font-size:12px; color:var(--muted); text-transform:uppercase;
+         letter-spacing:.07em; margin:16px 2px 8px; font-weight:600}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:12px}
+  .stepper{display:flex; align-items:center; gap:10px}
+  .stepper .val{flex:1; text-align:center; font-variant-numeric:tabular-nums; font-size:15px}
+  .chips{display:grid; grid-template-columns:repeat(3,1fr); gap:8px}
+  .chips button{min-height:48px; border-radius:12px; font-size:15px}
+
+  /* ---- lists ---- */
+  .list{background:var(--surface); border:1px solid var(--line); border-radius:16px; overflow:hidden}
+  .item{display:flex; align-items:center; gap:12px; padding:14px 14px;
+        border-bottom:1px solid var(--line); cursor:pointer}
+  .item:last-child{border-bottom:none}
+  .item:active{background:var(--surface2)}
+  .item .nm{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px}
+  .item .ico{font-size:19px; flex:none; width:22px; text-align:center}
+  .item.cur{background:var(--accent-dim)}
+  .item .add{flex:none; min-height:38px; width:44px; padding:0; border-radius:10px; font-size:18px}
+  .item .chk{color:var(--accent); font-weight:700; flex:none}
+  .crumb{display:flex; align-items:center; gap:8px; color:var(--muted);
+         font-size:13px; margin:0 2px 8px; overflow:hidden}
+  .crumb span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left}
+  .empty{color:var(--muted); font-size:14px; text-align:center; padding:26px 10px}
+
+  /* ---- tab bar ---- */
+  nav{
+    position:fixed; left:0; right:0; bottom:0; display:flex;
+    background:rgba(20,22,28,.92); backdrop-filter:blur(14px);
+    border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom); z-index:10;
+  }
+  nav a{
+    flex:1; text-align:center; padding:9px 0 7px; color:var(--muted);
+    text-decoration:none; font-size:10.5px; font-weight:600; letter-spacing:.02em;
+  }
+  nav a .ico{display:block; font-size:21px; margin-bottom:2px}
+  nav a.active{color:var(--accent)}
+  #toast{
+    position:fixed; left:50%; transform:translateX(-50%);
+    bottom:calc(84px + env(safe-area-inset-bottom)); background:#2b3040;
+    border:1px solid var(--line); color:var(--text); padding:10px 16px;
+    border-radius:999px; font-size:13px; opacity:0; transition:opacity .2s;
+    pointer-events:none; z-index:20; max-width:88%; text-align:center;
+  }
+  #toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="banner" class="hide"></div>
+
+  <!-- ============ REMOTE ============ -->
+  <section id="tab-remote">
+    <header>
+      <div class="now" id="title">Connecting…</div>
+      <div class="sub"><i class="dot" id="dot"></i><span id="state">—</span></div>
+    </header>
+
+    <div class="scrub">
+      <input type="range" id="seek" min="0" max="1000" value="0">
+      <div class="times"><span id="elapsed">0:00</span><span id="remain">-0:00</span></div>
+    </div>
+
+    <div class="row">
+      <button data-seek="-60"><span>−60s</span></button>
+      <button data-seek="-10"><span>−10s</span></button>
+      <button data-seek="10"><span>+10s</span></button>
+      <button data-seek="60"><span>+60s</span></button>
+    </div>
+
+    <div class="row playrow">
+      <button class="sm" id="prev"><span class="ico">⏮</span></button>
+      <button id="play">▶</button>
+      <button class="sm" id="next"><span class="ico">⏭</span></button>
+    </div>
+
+    <div class="row">
+      <button class="wide" id="cc"><span class="ico">💬</span>Subtitles</button>
+      <button id="fs"><span class="ico">⛶</span>Full screen</button>
+    </div>
+
+    <div class="label">Volume</div>
+    <div class="card">
+      <div class="stepper">
+        <button class="tiny" style="flex:0 0 56px" id="mute"><span class="ico">🔇</span></button>
+        <input type="range" id="vol" min="0" max="200" value="100">
+        <span class="val" style="flex:0 0 46px" id="volval">—</span>
+      </div>
+    </div>
+
+    <div class="label">Speed</div>
+    <div class="chips" id="rates"></div>
+
+    <div class="label">Other</div>
+    <div class="row">
+      <button class="sm" id="stop"><span class="ico">⏹</span>Stop</button>
+      <button class="sm" id="aspect"><span class="ico">🖼</span>Aspect</button>
+    </div>
+  </section>
+
+  <!-- ============ TRACKS ============ -->
+  <section id="tab-tracks" class="hide">
+    <div class="label">Subtitle track</div>
+    <div class="list" id="sublist"></div>
+    <div class="row"><button class="sm" id="subcycle"><span class="ico">🔁</span>Cycle subtitle track</button></div>
+
+    <div class="label">Subtitle delay</div>
+    <div class="card"><div class="stepper">
+      <button class="tiny" style="flex:0 0 72px" data-key="subdelay-down">−50ms</button>
+      <span class="val" id="subdelay">0 ms</span>
+      <button class="tiny" style="flex:0 0 72px" data-key="subdelay-up">+50ms</button>
+    </div></div>
+
+    <div class="label">Subtitle size &amp; position</div>
+    <div class="card"><div class="stepper">
+      <button class="tiny" data-key="subtitle-text-scale-down">A−</button>
+      <button class="tiny" data-key="subtitle-text-scale-normal">Reset</button>
+      <button class="tiny" data-key="subtitle-text-scale-up">A+</button>
+      <button class="tiny" data-key="subpos-down">↑</button>
+      <button class="tiny" data-key="subpos-up">↓</button>
+    </div></div>
+
+    <div class="label">Audio track</div>
+    <div class="list" id="audlist"></div>
+
+    <div class="label">Audio delay</div>
+    <div class="card"><div class="stepper">
+      <button class="tiny" style="flex:0 0 72px" data-key="audiodelay-down">−50ms</button>
+      <span class="val" id="auddelay">0 ms</span>
+      <button class="tiny" style="flex:0 0 72px" data-key="audiodelay-up">+50ms</button>
+    </div></div>
+  </section>
+
+  <!-- ============ LIBRARY ============ -->
+  <section id="tab-library" class="hide">
+    <div class="label">Library</div>
+    <div class="crumb"><span id="crumb">…</span></div>
+    <div class="row"><button class="tiny" id="up"><span class="ico">↩</span>Up a folder</button>
+      <button class="tiny" id="home"><span class="ico">🎬</span>Videos</button></div>
+    <div class="list" id="files"></div>
+  </section>
+
+  <!-- ============ QUEUE ============ -->
+  <section id="tab-queue" class="hide">
+    <div class="label">Up next</div>
+    <div class="list" id="queue"></div>
+    <div class="row">
+      <button class="sm" id="shuffle"><span class="ico">🔀</span>Shuffle</button>
+      <button class="sm" id="loop"><span class="ico">🔁</span>Loop</button>
+    </div>
+  </section>
+</div>
+
+<nav>
+  <a href="#" data-tab="remote" class="active"><span class="ico">🎛</span>Remote</a>
+  <a href="#" data-tab="tracks"><span class="ico">💬</span>Tracks</a>
+  <a href="#" data-tab="library"><span class="ico">📂</span>Library</a>
+  <a href="#" data-tab="queue"><span class="ico">📋</span>Queue</a>
+</nav>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const api = (path, params) => {
+  const q = params ? '?' + new URLSearchParams(params) : '';
+  return fetch('/api/' + path + q, {cache:'no-store'})
+    .then(r => r.json())
+    .catch(() => ({ok:false, error:'No answer from the remote server'}));
+};
+
+let st = null;          // latest VLC status
+let tab = 'remote';
+let seeking = false, volEditing = false;
+let pending = 0;        // suppress polling right after a command
+let libPath = null;
+
+/* ---------- utils ---------- */
+function fmt(sec){
+  sec = Math.max(0, Math.round(sec||0));
+  const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+           : `${m}:${String(s).padStart(2,'0')}`;
+}
+let toastTimer;
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function tick(){ if (navigator.vibrate) navigator.vibrate(8); }
+
+/* ---------- command plumbing ---------- */
+async function cmd(command, val, opts){
+  tick();
+  pending = Date.now();
+  const r = await api('cmd', val === undefined || val === null ? {command} : {command, val});
+  if (!r.ok){ toast(r.error || 'Command failed'); }
+  else { apply(r); }
+  pending = 0;
+  if (opts && opts.then) opts.then();
+  return r;
+}
+const key = k => cmd('key', k);
+
+/* ---------- render ---------- */
+function apply(s){
+  if (!s || !s.ok) return;
+  st = s;
+  $('#banner').classList.add('hide');
+
+  $('#title').textContent = s.title || 'Nothing playing';
+  const playing = s.state === 'playing';
+  $('#dot').classList.toggle('on', playing);
+  const bits = [s.state];
+  if (s.rate && Math.abs(s.rate - 1) > .01) bits.push(s.rate.toFixed(2) + '×');
+  if (s.fullscreen) bits.push('full screen');
+  $('#state').textContent = bits.join(' · ');
+  $('#play').textContent = playing ? '❚❚' : '▶';
+
+  if (!seeking){
+    const len = s.length || 0;
+    $('#seek').value = len ? Math.round((s.time/len)*1000) : 0;
+    $('#elapsed').textContent = fmt(s.time);
+    $('#remain').textContent = len ? '-' + fmt(len - s.time) : '--:--';
+  }
+  if (!volEditing){
+    const pct = Math.round((s.volume/256)*100);
+    $('#vol').value = Math.min(200, pct);
+    $('#volval').textContent = pct + '%';
+  }
+  $('#fs').classList.toggle('on', !!s.fullscreen);
+  $('#shuffle').classList.toggle('on', !!s.random);
+  $('#loop').classList.toggle('on', !!(s.loop || s.repeat));
+
+  $('#subdelay').textContent = Math.round((s.subtitledelay||0)*1000) + ' ms';
+  $('#auddelay').textContent = Math.round((s.audiodelay||0)*1000) + ' ms';
+
+  for (const b of document.querySelectorAll('#rates button'))
+    b.classList.toggle('on', Math.abs(s.rate - parseFloat(b.dataset.rate)) < .01);
+
+  if (tab === 'tracks') renderTracks();
+}
+
+function trackList(el, kind, tracks, picked){
+  const rows = [];
+  const off = kind === 'subtitle';
+  if (off) rows.push({id:-1, label:'Off'});
+  tracks.forEach(t => rows.push(t));
+  if (!rows.length || (off && rows.length === 1)){
+    el.innerHTML = '<div class="empty">No ' + kind + ' tracks in this file</div>';
+    return;
+  }
+  el.innerHTML = rows.map(t => `
+    <div class="item" data-kind="${kind}" data-id="${t.id}">
+      <span class="ico">${t.id === -1 ? '🚫' : (kind === 'subtitle' ? '💬' : '🔊')}</span>
+      <span class="nm">${t.label}</span>
+      <span class="chk">${picked === t.id ? '✓' : ''}</span>
+    </div>`).join('');
+}
+function renderTracks(){
+  if (!st) return;
+  trackList($('#sublist'), 'subtitle', st.tracks.subtitle, st.picked.subtitle);
+  trackList($('#audlist'), 'audio', st.tracks.audio, st.picked.audio);
+}
+
+async function loadQueue(){
+  const r = await api('playlist');
+  const el = $('#queue');
+  if (!r.ok) { el.innerHTML = `<div class="empty">${r.error}</div>`; return; }
+  if (!r.items.length){ el.innerHTML = '<div class="empty">Playlist is empty</div>'; return; }
+  el.innerHTML = r.items.map(i => `
+    <div class="item ${i.current ? 'cur':''}" data-plid="${i.id}">
+      <span class="ico">${i.current ? '🔊' : '▸'}</span>
+      <span class="nm">${i.name.replace(/[._]/g,' ')}</span>
+      <span class="chk" style="color:var(--muted);font-weight:400;font-size:12px">${i.duration>0?fmt(i.duration):''}</span>
+    </div>`).join('');
+}
+
+async function loadLibrary(path){
+  const r = await api('browse', path ? {path} : undefined);
+  const el = $('#files');
+  if (!r.ok){ el.innerHTML = `<div class="empty">${r.error}</div>`; return; }
+  libPath = r.path;
+  $('#crumb').textContent = r.path;
+  if (!r.entries.length){ el.innerHTML = '<div class="empty">Nothing playable here</div>'; return; }
+  el.innerHTML = r.entries.map(e => `
+    <div class="item" data-path="${encodeURIComponent(e.path)}" data-dir="${e.dir?1:0}" data-sub="${e.sub?1:0}">
+      <span class="ico">${e.dir ? '📁' : (e.sub ? '💬' : '🎬')}</span>
+      <span class="nm">${e.name.replace(/[._]/g,' ')}</span>
+      ${e.dir ? '<span class="chk" style="color:var(--muted)">›</span>'
+              : `<button class="add" data-enq="1">${e.sub ? '＋' : '＋'}</button>`}
+    </div>`).join('');
+}
+
+/* ---------- polling ---------- */
+async function poll(){
+  if (document.hidden || seeking || pending) return;
+  const s = await api('status');
+  if (!s.ok){
+    const b = $('#banner');
+    b.textContent = s.error;
+    b.classList.remove('hide');
+    $('#dot').classList.remove('on');
+    $('#state').textContent = 'not connected';
+    return;
+  }
+  apply(s);
+}
+setInterval(poll, 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+
+/* ---------- wiring ---------- */
+$('#play').onclick  = () => cmd('pl_pause');
+$('#prev').onclick  = () => cmd('pl_previous');
+$('#next').onclick  = () => cmd('pl_next');
+$('#stop').onclick  = () => cmd('pl_stop');
+$('#fs').onclick    = () => cmd('fullscreen');
+$('#cc').onclick    = () => key('subtitle-toggle');
+$('#mute').onclick  = () => key('vol-mute');
+$('#aspect').onclick= () => key('aspect-ratio');
+$('#subcycle').onclick = () => key('subtitle-track');
+$('#shuffle').onclick  = () => cmd('pl_random');
+$('#loop').onclick     = () => cmd('pl_loop');
+
+for (const b of document.querySelectorAll('[data-seek]'))
+  b.onclick = () => cmd('seek', (b.dataset.seek > 0 ? '+' : '') + b.dataset.seek);
+for (const b of document.querySelectorAll('[data-key]'))
+  b.onclick = () => key(b.dataset.key);
+
+$('#rates').innerHTML = [0.5,0.75,1,1.25,1.5,2]
+  .map(r => `<button data-rate="${r}">${r === 1 ? '1×' : r + '×'}</button>`).join('');
+for (const b of document.querySelectorAll('#rates button'))
+  b.onclick = () => cmd('rate', b.dataset.rate);
+
+const seek = $('#seek');
+const seekStart = () => { seeking = true; };
+const seekPreview = () => {
+  if (!st || !st.length) return;
+  const t = (seek.value/1000)*st.length;
+  $('#elapsed').textContent = fmt(t);
+  $('#remain').textContent  = '-' + fmt(st.length - t);
+};
+const seekCommit = () => {
+  const pct = (seek.value/10).toFixed(1);
+  cmd('seek', pct + '%').then(() => { seeking = false; });
+  setTimeout(() => { seeking = false; }, 700);
+};
+seek.addEventListener('pointerdown', seekStart);
+seek.addEventListener('touchstart', seekStart, {passive:true});
+seek.addEventListener('input', seekPreview);
+seek.addEventListener('change', seekCommit);
+
+const vol = $('#vol');
+let volTimer;
+vol.addEventListener('input', () => {
+  volEditing = true;
+  $('#volval').textContent = vol.value + '%';
+  clearTimeout(volTimer);
+  volTimer = setTimeout(() => cmd('volume', Math.round(vol.value*2.56)), 120);
+});
+vol.addEventListener('change', () => setTimeout(() => { volEditing = false; }, 600));
+
+$('#sublist').onclick = $('#audlist').onclick = ev => {
+  const row = ev.target.closest('.item'); if (!row) return;
+  const kind = row.dataset.kind === 'subtitle' ? 'subtitle_track' : 'audio_track';
+  cmd(kind, row.dataset.id).then(renderTracks);
+  renderTracks();
+};
+$('#queue').onclick = ev => {
+  const row = ev.target.closest('.item'); if (!row) return;
+  cmd('pl_play', row.dataset.plid).then(loadQueue);
+  setTimeout(loadQueue, 500);
+};
+$('#files').onclick = ev => {
+  const row = ev.target.closest('.item'); if (!row) return;
+  const path = decodeURIComponent(row.dataset.path);
+  if (row.dataset.dir === '1'){ loadLibrary(path); return; }
+  if (ev.target.closest('[data-enq]')){
+    cmd(row.dataset.sub === '1' ? 'addsubtitle' : 'in_enqueue', path);
+    toast(row.dataset.sub === '1' ? 'Subtitle file loaded' : 'Added to queue');
+    return;
+  }
+  if (row.dataset.sub === '1'){ cmd('addsubtitle', path); toast('Subtitle file loaded'); return; }
+  cmd('in_play', path);
+  toast('Starting…');
+  show('remote');
+};
+$('#up').onclick   = () => { if (libPath) loadLibrary(libPath.replace(/\/[^/]+\/?$/, '') || '/'); };
+$('#home').onclick = () => loadLibrary(null);
+
+/* ---------- tabs ---------- */
+function show(name){
+  tab = name;
+  for (const s of document.querySelectorAll('section'))
+    s.classList.toggle('hide', s.id !== 'tab-' + name);
+  for (const a of document.querySelectorAll('nav a'))
+    a.classList.toggle('active', a.dataset.tab === name);
+  window.scrollTo(0,0);
+  if (name === 'queue') loadQueue();
+  if (name === 'library' && libPath === null) loadLibrary(null);
+  if (name === 'tracks') renderTracks();
+}
+for (const a of document.querySelectorAll('nav a'))
+  a.onclick = e => { e.preventDefault(); tick(); show(a.dataset.tab); };
+
+poll();
+</script>
+</body>
+</html>
